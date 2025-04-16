@@ -13,7 +13,9 @@ pip install requirements.txt
 ```
 
 ## 2. run api server
+```
 python main.py
+```
 
 ## 3. test
 ```
