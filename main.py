@@ -4,6 +4,8 @@ import time
 import json
 from typing import Annotated, List, Dict, Optional
 from typing_extensions import TypedDict
+from jose import JWTError, jwt
+from datetime import datetime, timedelta
 from pydantic import BaseModel
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -13,11 +15,30 @@ from langgraph.graph.message import add_messages
 from langgraph.graph import START, END
 
 # Set OpenAI API key
+SECRET_KEY = "your-secret-key"
 OPENAI_API_KEY = "Your API KEY"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
 
-# Define State (including messages and tool_result)
+
+# === Auth Helpers ===
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def verify_token(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+
+# === State & Agent Setup ===
 class State(TypedDict):
     messages: Annotated[list, add_messages]
     tool_result: str
@@ -194,6 +215,13 @@ async def get_chat_response(request: ChatCompletionRequest):
 
 # Define FastAPI endpoints
 app = FastAPI()
+
+@app.post("/token")
+def issue_token(username: str, password: str):
+    if username != "testuser" or password != "secret":
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    token = create_access_token({"sub": username})
+    return {"access_token": token, "token_type": "bearer"}
 
 @app.post("/v1/chat/completions")
 async def chat_completions(
