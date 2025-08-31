@@ -14,6 +14,16 @@ from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph import START, END
 
+# openai 패키지의 타입들을 직접 import 합니다.
+from openai.types.chat import (
+    ChatCompletionMessageParam,  # 요청 시 messages 필드의 타입
+    ChatCompletionToolParam,     # 요청 시 tools 필드의 타입
+    ChatCompletionToolChoiceOptionParam, # 요청 시 tool_choice 필드의 타입
+    ChatCompletion,              # 일반 응답의 전체 타입
+    ChatCompletionChunk          # 스트리밍 응답의 chunk 타입
+)
+
+
 # Set OpenAI API key
 SECRET_KEY = "your-secret-key"
 OPENAI_API_KEY = "Your API KEY"
@@ -83,7 +93,9 @@ class Message(BaseModel):
 # Define ChatCompletionRequest model
 class ChatCompletionRequest(BaseModel):
     model: str
-    messages: List[Message]
+    messages: List[ChatCompletionMessageParam]
+    #tools: Optional[List[ChatCompletionToolParam]] = None
+    #tool_choice: Optional[ChatCompletionToolChoiceOptionParam] = None
     temperature: Optional[float] = 1.0
     top_p: Optional[float] = 1.0
     max_tokens: Optional[int] = None
@@ -91,6 +103,7 @@ class ChatCompletionRequest(BaseModel):
     presence_penalty: Optional[float] = 0.0
     frequency_penalty: Optional[float] = 0.0
     user: Optional[str] = None
+    
 
 # Format data for SSE (Server-Sent Events)
 def format_sse(data: dict) -> str:
@@ -228,6 +241,25 @@ async def chat_completions(
     request_data: ChatCompletionRequest,
     authorization: Optional[str] = Header(default=None)
 ):
+    
+    try:
+        request_data = await request.json()
+    except Exception as e:
+        print(f"JSON 파싱 에러: {e}")
+        return Response(content="Invalid JSON body", status_code=400)    
+    # (선택 사항) 데이터는 받았지만, 여전히 데이터 형식이 올바른지는 검증하는 것이 좋습니다.
+    try:
+        ChatCompletionRequest.model_validate(request_data)
+        print(">>> 데이터 형식 검증 성공!")
+    except Exception as e:
+        print(f"데이터 형식 검증 실패: {e}")
+        # 여기서 에러 응답을 반환할 수 있습니다.
+    print("\n--- 최종적으로 서버가 받은 순수한 데이터 ---")    
+    # 이제 request_data는 완벽하게 우리가 원하는 순수한 dict 입니다.
+    messages_list = request_data.get('messages', [])
+    print(messages_list)  # 이미지 데이터 URI 출력 예시
+    
+    
     # Handle streaming request
     if request_data.stream:
         return StreamingResponse(
